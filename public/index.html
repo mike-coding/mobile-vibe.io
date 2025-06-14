@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="style.css">
+  <title>tiny-io</title>
+</head>
+<body>
+  <div id="overlay">
+    <input id="nameInput" placeholder="Enter your name"/>
+    <button id="joinBtn">Join</button>
+  </div>
+  <canvas id="game"></canvas>
+  <div id="joystick">
+    <div id="stick"></div>
+  </div>
+  <div id="fire-joystick">
+    <div id="fire-stick"></div>
+  </div>
+  <div id="fullscreen-btn" title="Fullscreen">&#x26F6;</div>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="client.js"></script>
+</body>
+</html>
