@@ -9,20 +9,39 @@ let players = {};
 let projectiles = [];
 let lastFire = {}; // Track last fire time for each player
 
-const MAP_WIDTH = 20;
-const MAP_HEIGHT = 15;
+const MAP_WIDTH = 40;
+const MAP_HEIGHT = 30;
 const TILE_SIZE = 64; // pixels, should match your sprite size
+
+const PADDING_X = 6; // left/right
+const PADDING_Y = 3; // top/bottom
+
+const PADDED_WIDTH = MAP_WIDTH + PADDING_X * 2;
+const PADDED_HEIGHT = MAP_HEIGHT + PADDING_Y * 2;
 
 // 0 = empty, 1 = tree
 let map = [];
-for (let y = 0; y < MAP_HEIGHT; y++) {
+for (let y = 0; y < PADDED_HEIGHT; y++) {
   let row = [];
-  for (let x = 0; x < MAP_WIDTH; x++) {
-    // Make a box boundary of trees
-    if (x === 0 || y === 0 || x === MAP_WIDTH-1 || y === MAP_HEIGHT-1) {
-      row.push(1);
+  for (let x = 0; x < PADDED_WIDTH; x++) {
+    // Main map area (not padding)
+    if (
+      x >= PADDING_X && x < PADDING_X + MAP_WIDTH &&
+      y >= PADDING_Y && y < PADDING_Y + MAP_HEIGHT
+    ) {
+      // Boundary of main box: always tree
+      if (
+        x === PADDING_X || y === PADDING_Y ||
+        x === PADDING_X + MAP_WIDTH - 1 || y === PADDING_Y + MAP_HEIGHT - 1
+      ) {
+        row.push(1); // tree
+      } else {
+        // 15% chance tree, 85% empty
+        row.push(Math.random() < 0.15 ? 1 : 0);
+      }
     } else {
-      row.push(0);
+      // Padding: random grass (0) or tree (1)
+      row.push(Math.random() < 0.8 ? 1 : 0); // ~80% trees
     }
   }
   map.push(row);
@@ -37,9 +56,20 @@ setInterval(() => {
     proj.t++;
   }
 
-  // Collision detection
+  // Destroy projectiles that hit a tree
   for (let i = projectiles.length - 1; i >= 0; i--) {
     const proj = projectiles[i];
+    const tileX = Math.floor(proj.x / TILE_SIZE);
+    const tileY = Math.floor(proj.y / TILE_SIZE);
+    if (
+      tileX < 0 || tileX >= PADDED_WIDTH ||
+      tileY < 0 || tileY >= PADDED_HEIGHT ||
+      map[tileY][tileX] === 1
+    ) {
+      projectiles.splice(i, 1);
+      continue;
+    }
+    // Existing player collision logic follows...
     for (const [id, player] of Object.entries(players)) {
       if (id !== proj.owner) {
         const dx = proj.x - player.x;
@@ -61,7 +91,7 @@ setInterval(() => {
   }
 
   // Remove old projectiles
-  projectiles = projectiles.filter(p => p.t < 60);
+  projectiles = projectiles.filter(p => p.t < 20);
 
   // Emit state to all clients
   io.emit('state', players);
@@ -70,9 +100,20 @@ setInterval(() => {
 
 io.on('connection', socket => {
   socket.on('newPlayer', username => {
+    let spawnX, spawnY;
+    while (true) {
+      // Random position inside the playable area (not padding, not on a tree)
+      const x = PADDING_X + 1 + Math.floor(Math.random() * (MAP_WIDTH - 2));
+      const y = PADDING_Y + 1 + Math.floor(Math.random() * (MAP_HEIGHT - 2));
+      if (map[y][x] === 0) { // 0 = empty
+        spawnX = x * TILE_SIZE + TILE_SIZE / 2;
+        spawnY = y * TILE_SIZE + TILE_SIZE / 2;
+        break;
+      }
+    }
     players[socket.id] = {
-      x: TILE_SIZE * 2 + TILE_SIZE/2,
-      y: TILE_SIZE * 2 + TILE_SIZE/2,
+      x: spawnX,
+      y: spawnY,
       name: username,
       hp: 40
     };
@@ -93,8 +134,8 @@ io.on('connection', socket => {
       const tileY = Math.floor(newY / TILE_SIZE);
       // Check collision with trees
       if (
-        tileX >= 0 && tileX < MAP_WIDTH &&
-        tileY >= 0 && tileY < MAP_HEIGHT &&
+        //tileX >= 0 && tileX < MAP_WIDTH &&
+        //tileY >= 0 && tileY < MAP_HEIGHT &&
         map[tileY][tileX] === 0
       ) {
         p.x = newX;

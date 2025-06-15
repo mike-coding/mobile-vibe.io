@@ -12,13 +12,21 @@
     <button id="joinBtn">Join</button>
   </div>
   <canvas id="game"></canvas>
-  <div id="joystick">
-    <div id="stick"></div>
+  <div id="ui-container">
+    <div id="joystick">
+      <div id="stick"></div>
+    </div>
+    <div id="fire-joystick">
+      <div id="fire-stick"></div>
+    </div>
+    <div id="fullscreen-btn" title="Fullscreen">&#x26F6;</div>
+    <!--  -->
+    <div id="debug-btn" title="Debug">&#9881;</div>
+    <div id="debug-overlay" style="display:none;">
+      <div id="debug-content"></div>
+      <button id="debug-close">Close</button>
+    </div>
   </div>
-  <div id="fire-joystick">
-    <div id="fire-stick"></div>
-  </div>
-  <div id="fullscreen-btn" title="Fullscreen">&#x26F6;</div>
   <script src="/socket.io/socket.io.js"></script>
   <script src="client.js"></script>
 </body>

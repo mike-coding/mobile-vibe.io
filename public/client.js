@@ -2,6 +2,9 @@ const socket = io();
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 
+const playerImg = new Image();
+playerImg.src = 'sprites/player.png';
+
 // --- Place the resize function here ---
 function resize() {
   const dpr = window.devicePixelRatio || 1;
@@ -20,6 +23,7 @@ function resize() {
   ctx.msImageSmoothingEnabled = false;
 }
 window.addEventListener('resize', resize);
+document.addEventListener('fullscreenchange', resize);
 resize();
 
 let players = {};
@@ -77,12 +81,10 @@ socket.on('state', all => {
   let rotated = false;
   if (isMobile() && isPortrait()) {
     rotated = true;
-    // Rotate context 90deg clockwise and translate origin
     ctx.translate(canvas.width, 0);
     ctx.rotate(Math.PI / 2);
   }
 
-  // --- CAMERA ---
   const p = players[socket.id];
   let camX = 0, camY = 0;
   let cssWidth = parseInt(canvas.style.width) || window.innerWidth;
@@ -90,19 +92,37 @@ socket.on('state', all => {
 
   if (p) {
     if (rotated) {
-      // Swap width/height for camera centering
-      camX = p.x - cssHeight / 2;
-      camY = p.y - cssWidth / 2;
+      let fudgeX, fudgeY;
+      if (document.fullscreenElement) {
+        // Fullscreen fudge factors
+        fudgeX = 3.65;      // adjust as needed
+        fudgeY = 2.475;   // adjust as needed
+      } else {
+        // Non-fullscreen fudge factors
+        fudgeX = 4;      // adjust as needed
+        fudgeY = 2.15;  // adjust as needed
+      }
+      camX = p.x - canvas.width / fudgeX;
+      camY = p.y - canvas.height / fudgeY;
+      ctx.translate(-camX, -camY);
     } else {
       camX = p.x - cssWidth / 2;
       camY = p.y - cssHeight / 2;
+      ctx.translate(-camX, -camY);
     }
   }
-  if (rotated) {
-    ctx.translate(-camY, -camX);
-  } else {
-    ctx.translate(-camX, -camY);
-  }
+
+  // --- DEBUG DATA ---
+  debugData = {
+    camX,
+    camY,
+    playerX: p ? p.x : 'n/a',
+    playerY: p ? p.y : 'n/a',
+    cssWidth,
+    cssHeight,
+    rotated
+  };
+  if (debugOverlay.style.display === 'flex') updateDebugOverlay();
 
   // --- MAP DRAW ---
   if (map.length && grassMap.length) {
@@ -123,10 +143,16 @@ socket.on('state', all => {
 
   for (let id in players) {
     const p = players[id];
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, 20, 0, 2*Math.PI);
-    ctx.fillStyle = id === socket.id ? '#0f0' : '#f00';
-    ctx.fill();
+    // Draw player sprite centered on (p.x, p.y)
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.drawImage(
+      playerImg,
+      -16, -16, // Center the sprite (assuming 64x64 sprite)
+      32, 32
+    );
+    ctx.restore();
+
     ctx.fillStyle = '#000';
     ctx.fillText(p.name, p.x - 15, p.y - 30);
 
@@ -136,8 +162,6 @@ socket.on('state', all => {
     ctx.fillRect(p.x - 20, p.y + 32, 40, 4);
     ctx.fillStyle = '#0f0';
     ctx.fillRect(p.x - 20, p.y + 32, 40 * (p.hp / 40), 4);
-    //ctx.strokeStyle = '#000';
-    //ctx.strokeRect(p.x - 20, p.y + 32, 40, 4);
   }
 
   // Projectile rendering
@@ -172,6 +196,14 @@ canvas.addEventListener('pointerdown', e => {
   // Normalize to unit vector
   socket.emit('move', { dx: dx/len, dy: dy/len });
 });
+
+function rotateInput(dx, dy) {
+  if (isMobile() && isPortrait()) {
+    // +90deg: (dx, dy) => (-dy, dx)
+    return { dx: dy, dy: -dx };
+  }
+  return { dx, dy };
+}
 
 // Virtual Joystick logic
 const joystick = document.getElementById('joystick');
@@ -216,7 +248,8 @@ function endJoystick() {
 
 function joyLoop() {
   if (joyActive && (Math.abs(joyDx) > 0.1 || Math.abs(joyDy) > 0.1)) {
-    socket.emit('move', { dx: joyDx, dy: joyDy });
+    const { dx, dy } = rotateInput(joyDx, joyDy);
+    socket.emit('move', { dx, dy });
   }
   if (joyActive) joyRAF = requestAnimationFrame(joyLoop);
 }
@@ -289,8 +322,8 @@ function endFireJoystick() {
 
 function fireLoop() {
   if (fireActive && (Math.abs(fireDx) > 0.3 || Math.abs(fireDy) > 0.3)) {
-    // Only fire if joystick is moved enough from center
-    socket.emit('fire', { dx: fireDx, dy: fireDy });
+    const { dx, dy } = rotateInput(fireDx, fireDy);
+    socket.emit('fire', { dx, dy });
   }
   if (fireActive) fireRAF = requestAnimationFrame(fireLoop);
 }
@@ -354,3 +387,71 @@ function updateCanvasOrientation() {
 window.addEventListener('resize', updateCanvasOrientation);
 window.addEventListener('orientationchange', updateCanvasOrientation);
 document.addEventListener('DOMContentLoaded', updateCanvasOrientation);
+
+// --- DEBUG UI ---
+const debugBtn = document.getElementById('debug-btn');
+const debugOverlay = document.getElementById('debug-overlay');
+const debugContent = document.getElementById('debug-content');
+const debugClose = document.getElementById('debug-close');
+
+let debugData = {};
+
+debugBtn.onclick = () => {
+  debugOverlay.style.display = 'flex';
+  updateDebugOverlay();
+};
+debugClose.onclick = () => {
+  debugOverlay.style.display = 'none';
+};
+
+function updateDebugOverlay() {
+  debugContent.innerHTML = `
+    <b>Debug Info</b><br>
+    camX: ${debugData.camX}<br>
+    camY: ${debugData.camY}<br>
+    player.x: ${debugData.playerX}<br>
+    player.y: ${debugData.playerY}<br>
+    canvas.width: ${canvas.width}<br>
+    canvas.height: ${canvas.height}<br>
+    cssWidth: ${debugData.cssWidth}<br>
+    cssHeight: ${debugData.cssHeight}<br>
+    rotated: ${debugData.rotated}<br>
+    window.innerWidth: ${window.innerWidth}<br>
+    window.innerHeight: ${window.innerHeight}<br>
+    devicePixelRatio: ${window.devicePixelRatio}<br>
+    <br>canvas.style.width: ${canvas.style.width}
+    <br>canvas.style.height: ${canvas.style.height}
+    <br>document.body.clientWidth: ${document.body.clientWidth}
+    <br>document.body.clientHeight: ${document.body.clientHeight}
+    <br>screen.width: ${screen.width}
+    <br>screen.height: ${screen.height}
+  `;
+}
+
+// --- UI Rotation for Mobile Portrait ---
+function updateUIRotation() {
+  const ui = document.getElementById('ui-container');
+  if (isMobile() && isPortrait()) {
+    ui.style.transform = 'rotate(90deg)';
+    ui.style.transformOrigin = 'top left';
+    // Adjust position and size to fill the rotated viewport
+    ui.style.width = window.innerHeight + 'px';
+    ui.style.height = window.innerWidth + 'px';
+    ui.style.left = (window.innerWidth) + 'px';
+    ui.style.top = '0';
+    ui.style.position = 'fixed';
+  } else {
+    ui.style.transform = '';
+    ui.style.transformOrigin = '';
+    ui.style.width = '100vw';
+    ui.style.height = '100vh';
+    ui.style.left = '0';
+    ui.style.top = '0';
+    ui.style.position = 'fixed';
+  }
+}
+window.addEventListener('resize', updateUIRotation);
+window.addEventListener('orientationchange', updateUIRotation);
+document.addEventListener('DOMContentLoaded', updateUIRotation);
+
+
