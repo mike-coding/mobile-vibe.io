@@ -7,3 +7,4 @@
 * [x] projectiles should collide with trees
 * [ ] reduce view window size
 * [ ] tile gaps
+* [x] modularize client

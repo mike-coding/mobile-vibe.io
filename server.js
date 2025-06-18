@@ -8,6 +8,9 @@ app.use(express.static('public'));
 let players = {};
 let projectiles = [];
 let lastFire = {}; // Track last fire time for each player
+let enemies = [];
+const ENEMY_COUNT = 8;
+const ENEMY_HP = 25;
 
 const MAP_WIDTH = 40;
 const MAP_HEIGHT = 30;
@@ -51,8 +54,8 @@ for (let y = 0; y < PADDED_HEIGHT; y++) {
 setInterval(() => {
   // Update projectiles
   for (let proj of projectiles) {
-    proj.x += proj.dx * 15;
-    proj.y += proj.dy * 15;
+    proj.x += proj.dx * 10;
+    proj.y += proj.dy * 10;
     proj.t++;
   }
 
@@ -90,13 +93,91 @@ setInterval(() => {
     }
   }
 
+  // Projectile vs enemy
+  for (let i = projectiles.length - 1; i >= 0; i--) {
+    const proj = projectiles[i];
+    // Only allow projectiles from players to damage enemies
+    if (players[proj.owner]) {
+      for (let j = enemies.length - 1; j >= 0; j--) {
+        const enemy = enemies[j];
+        const dx = proj.x - enemy.x;
+        const dy = proj.y - enemy.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < 20 + 8) { // 20 = enemy radius, 8 = projectile radius
+          projectiles.splice(i, 1);
+          enemy.hp -= 5;
+          if (enemy.hp <= 0) {
+            enemies.splice(j, 1);
+          }
+          break;
+        }
+      }
+    }
+  }
+
   // Remove old projectiles
   projectiles = projectiles.filter(p => p.t < 20);
 
-  // Emit state to all clients
-  io.emit('state', players);
-  io.emit('projectiles', projectiles);
-}, 1000 / 60);
+  // --- ENSURE ENEMY COUNT ---
+  while (enemies.length < ENEMY_COUNT) {
+    enemies.push(spawnEnemy());
+  }
+
+  // --- ENEMY AI LOGIC ---
+  for (let enemy of enemies) {
+    // --- Random movement ---
+    enemy.moveTimer--;
+    if (enemy.moveTimer <= 0) {
+      enemy.dir = Math.random() * Math.PI * 2;
+      enemy.moveTimer = 60 + Math.floor(Math.random() * 60); // change direction every 1-2 seconds
+    }
+    const ENEMY_SPEED = 1.5;
+    const dx = Math.cos(enemy.dir) * ENEMY_SPEED;
+    const dy = Math.sin(enemy.dir) * ENEMY_SPEED;
+    let newX = enemy.x + dx;
+    let newY = enemy.y + dy;
+    const tileX = Math.floor(newX / TILE_SIZE);
+    const tileY = Math.floor(newY / TILE_SIZE);
+    if (map[tileY] && map[tileY][tileX] === 0) {
+      enemy.x = newX;
+      enemy.y = newY;
+    } else {
+      // Hit wall, pick new direction next frame
+      enemy.moveTimer = 0;
+    }
+
+    // --- Shooting ---
+    enemy.fireCooldown--;
+    if (enemy.fireCooldown <= 0) {
+      // Shoot in a random direction
+      const angle = Math.random() * Math.PI * 2;
+      projectiles.push({
+        x: enemy.x,
+        y: enemy.y,
+        dx: Math.cos(angle),
+        dy: Math.sin(angle),
+        owner: enemy.id,
+        t: 0
+      });
+      enemy.fireCooldown = 90 + Math.floor(Math.random() * 60); // fire every 1.5–2.5 seconds
+    }
+  }
+
+  for (const [id, player] of Object.entries(players)) {
+    // Only send the player their own info + nearby others
+    const nearbyPlayers = Object.values(players).filter(
+      p => p === player || (
+        (p.x - player.x) ** 2 + (p.y - player.y) ** 2 <= (7 * TILE_SIZE) ** 2
+      )
+    );
+    const nearbyEnemies = getNearbyEntities(player, enemies, 7);
+    const nearbyProjectiles = getNearbyEntities(player, projectiles, 7);
+
+    io.to(id).emit('state', Object.fromEntries(nearbyPlayers.map(p => [p.id || id, p])));
+    io.to(id).emit('projectiles', nearbyProjectiles);
+    io.to(id).emit('enemies', nearbyEnemies);
+  }
+}, 1000 / 30); // 30Hz
 
 io.on('connection', socket => {
   socket.on('newPlayer', username => {
@@ -112,6 +193,7 @@ io.on('connection', socket => {
       }
     }
     players[socket.id] = {
+      id: socket.id, // add this line
       x: spawnX,
       y: spawnY,
       name: username,
@@ -189,4 +271,35 @@ function getLocalIp() {
     }
   }
   return 'localhost';
+}
+
+function spawnEnemy() {
+  while (true) {
+    const x = PADDING_X + 1 + Math.floor(Math.random() * (MAP_WIDTH - 2));
+    const y = PADDING_Y + 1 + Math.floor(Math.random() * (MAP_HEIGHT - 2));
+    if (map[y][x] === 0) {
+      return {
+        id: 'enemy_' + Math.random().toString(36).slice(2, 10),
+        x: x * TILE_SIZE + TILE_SIZE / 2,
+        y: y * TILE_SIZE + TILE_SIZE / 2,
+        hp: ENEMY_HP,
+        dir: Math.random() * Math.PI * 2, // random direction in radians
+        moveTimer: 0,
+        fireCooldown: 0
+      };
+    }
+  }
+}
+
+while (enemies.length < ENEMY_COUNT) {
+  enemies.push(spawnEnemy());
+}
+
+function getNearbyEntities(center, entities, radiusTiles) {
+  const radiusPx = radiusTiles * TILE_SIZE;
+  return entities.filter(e => {
+    const dx = e.x - center.x;
+    const dy = e.y - center.y;
+    return dx * dx + dy * dy <= radiusPx * radiusPx;
+  });
 }
