@@ -103,11 +103,20 @@ setInterval(() => {
         const enemy = enemies[j];
         const dx = proj.x - enemy.x;
         const dy = proj.y - enemy.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist < 20 + 8) { // 20 = enemy radius, 8 = projectile radius
+        const dist = Math.sqrt(dx * dx + dy * dy);        if (dist < 20 + 8) { // 20 = enemy radius, 8 = projectile radius
           projectiles.splice(i, 1);
           enemy.hp -= 5;
           if (enemy.hp <= 0) {
+            // 50% chance to drop an item
+            if (Math.random() < 0.5) {
+              items.push({
+                id: 'item_' + Math.random().toString(36).slice(2, 10),
+                x: enemy.x,
+                y: enemy.y,
+                type: 'food',
+                healAmount: 15
+              });
+            }
             enemies.splice(j, 1);
           }
           break;
@@ -163,6 +172,22 @@ setInterval(() => {
       enemy.fireCooldown = 90 + Math.floor(Math.random() * 60); // fire every 1.5–2.5 seconds
     }
   }
+  // --- ITEM COLLECTION ---
+  for (const [id, player] of Object.entries(players)) {
+    for (let i = items.length - 1; i >= 0; i--) {
+      const item = items[i];
+      const dx = item.x - player.x;
+      const dy = item.y - player.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < 30) { // Collection radius
+        // Heal the player
+        player.hp = Math.min(player.hp + item.healAmount, 40); // Max HP is 40
+        // Remove the item
+        items.splice(i, 1);
+        break;
+      }
+    }
+  }
 
   for (const [id, player] of Object.entries(players)) {
     // Only send the player their own info + nearby others
@@ -173,10 +198,12 @@ setInterval(() => {
     );
     const nearbyEnemies = getNearbyEntities(player, enemies, 7);
     const nearbyProjectiles = getNearbyEntities(player, projectiles, 7);
+    const nearbyItems = getNearbyEntities(player, items, 7);
 
     io.to(id).emit('state', Object.fromEntries(nearbyPlayers.map(p => [p.id || id, p])));
     io.to(id).emit('projectiles', nearbyProjectiles);
     io.to(id).emit('enemies', nearbyEnemies);
+    io.to(id).emit('items', nearbyItems);
   }
 }, 1000 / 60); // 30Hz
 
