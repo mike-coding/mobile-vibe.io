@@ -4,6 +4,7 @@ import { TileMap } from './client/TileMap.js';
 import { Joystick } from './client/Joystick.js';
 import { UIManager } from './client/UIManager.js';
 import { Enemy } from './client/Enemy.js';
+import { Item } from './client/Item.js';
 
 const socket = io();
 const canvas = document.getElementById('game');
@@ -12,7 +13,10 @@ const playerImg = new Image();
 playerImg.src = 'sprites/entity/player/player.png';
 const slimeImg = new Image();
 slimeImg.src = 'sprites/entity/slime/test.png';
+const foodImg = new Image();
+foodImg.src = 'sprites/item/1.png';
 let enemies = [];
+let itemObjects = {};
 const uiManager = new UIManager();
 
 function resize() {
@@ -169,12 +173,19 @@ socket.on('state', all => {
     }
   }
   projectiles = projectiles.filter(p => p.t < 20);
-
   // Enemy rendering with culling
   for (let id in enemyObjects) {
     const enemy = enemyObjects[id];
     if (isOnScreen(enemy.x, enemy.y, camX, camY, viewW, viewH)) {
       enemy.draw(ctx);
+    }
+  }
+
+  // Item rendering with culling
+  for (let id in itemObjects) {
+    const item = itemObjects[id];
+    if (isOnScreen(item.x, item.y, camX, camY, viewW, viewH)) {
+      item.draw(ctx);
     }
   }
 
@@ -200,6 +211,24 @@ socket.on('enemies', data => {
   for (let id in enemyObjects) {
     if (!data.find(e => e.id === id)) {
       delete enemyObjects[id];
+    }
+  }
+});
+
+// Handle items
+socket.on('items', data => {
+  // Update or create Item instances
+  for (let item of data) {
+    if (!itemObjects[item.id]) {
+      itemObjects[item.id] = new Item(item, foodImg);
+    } else {
+      itemObjects[item.id].update(item);
+    }
+  }
+  // Remove items that no longer exist
+  for (let id in itemObjects) {
+    if (!data.find(i => i.id === id)) {
+      delete itemObjects[id];
     }
   }
 });

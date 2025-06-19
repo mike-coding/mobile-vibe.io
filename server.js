@@ -154,9 +154,7 @@ setInterval(() => {
     } else {
       // Hit wall, pick new direction next frame
       enemy.moveTimer = 0;
-    }
-
-    // --- Shooting ---
+    }    // --- Shooting ---
     enemy.fireCooldown--;
     if (enemy.fireCooldown <= 0) {
       // Shoot in a random direction
@@ -167,6 +165,7 @@ setInterval(() => {
         dx: Math.cos(angle),
         dy: Math.sin(angle),
         owner: enemy.id,
+        type: 'slimeball',
         t: 0
       });
       enemy.fireCooldown = 90 + Math.floor(Math.random() * 60); // fire every 1.5–2.5 seconds
@@ -258,8 +257,7 @@ io.on('connection', socket => {
 
   socket.on('fire', data => {
     const now = Date.now();
-    if (!lastFire[socket.id] || now - lastFire[socket.id] > 500) { // 500ms cooldown
-      if (typeof data.dx === 'number' && typeof data.dy === 'number') {
+    if (!lastFire[socket.id] || now - lastFire[socket.id] > 500) { // 500ms cooldown      if (typeof data.dx === 'number' && typeof data.dy === 'number') {
         const p = players[socket.id];
         if (!p) return;
         projectiles.push({
@@ -268,13 +266,14 @@ io.on('connection', socket => {
           dx: data.dx,
           dy: data.dy,
           owner: socket.id,
+          type: 'fireball',
           t: 0
         });
         lastFire[socket.id] = now;
       }
     }
     // No longer emit projectile here; game loop handles it
-  });
+  );
 
   socket.emit('map', map);
 

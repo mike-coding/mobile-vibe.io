@@ -6,6 +6,7 @@ export class UIManager {
     this.debugClose = document.getElementById('debug-close');
     this.fullscreenBtn = document.getElementById('fullscreen-btn');
     this.uiContainer = document.getElementById('ui-container');
+    this.overlay = document.getElementById('overlay'); // Add overlay reference
 
     this._bindEvents();
   }
@@ -30,11 +31,13 @@ export class UIManager {
           document.exitFullscreen();
         }
       };
-    }
-    window.addEventListener('resize', () => this.updateUIRotation());
+    }    window.addEventListener('resize', () => this.updateUIRotation());
     window.addEventListener('orientationchange', () => this.updateUIRotation());
     document.addEventListener('DOMContentLoaded', () => this.updateUIRotation());
-  }  updateDebugOverlay(debugData) {
+    
+    // Apply initial rotation state
+    this.updateUIRotation();
+  }updateDebugOverlay(debugData) {
     this.debugData = debugData;
     if (!this.debugContent) return;
     this.debugContent.innerHTML = `
@@ -78,10 +81,12 @@ export class UIManager {
       <br>canvas.style.height: ${debugData.canvasStyleHeight}
     `;
   }
-
   updateUIRotation() {
+    const isPortraitMobile = this.isMobile() && this.isPortrait();
+    
+    // Handle UI container rotation
     if (!this.uiContainer) return;
-    if (this.isMobile() && this.isPortrait()) {
+    if (isPortraitMobile) {
       this.uiContainer.style.transform = 'rotate(90deg)';
       this.uiContainer.style.transformOrigin = 'top left';
       this.uiContainer.style.width = window.innerHeight + 'px';
@@ -97,6 +102,27 @@ export class UIManager {
       this.uiContainer.style.left = '0';
       this.uiContainer.style.top = '0';
       this.uiContainer.style.position = 'fixed';
+    }
+    
+    // Handle overlay rotation (name input and join button)
+    if (this.overlay) {
+      if (isPortraitMobile) {
+        this.overlay.style.transform = 'rotate(90deg)';
+        this.overlay.style.transformOrigin = 'top left';
+        this.overlay.style.width = window.innerHeight + 'px';
+        this.overlay.style.height = window.innerWidth + 'px';
+        this.overlay.style.left = (window.innerWidth) + 'px';
+        this.overlay.style.top = '0';
+        this.overlay.style.position = 'fixed';
+      } else {
+        this.overlay.style.transform = '';
+        this.overlay.style.transformOrigin = '';
+        this.overlay.style.width = '100vw';
+        this.overlay.style.height = '100vh';
+        this.overlay.style.left = '0';
+        this.overlay.style.top = '0';
+        this.overlay.style.position = 'fixed';
+      }
     }
   }
 
