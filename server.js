@@ -9,6 +9,7 @@ let players = {};
 let projectiles = [];
 let lastFire = {}; // Track last fire time for each player
 let enemies = [];
+let items = []; // Add items array
 const ENEMY_COUNT = 8;
 const ENEMY_HP = 25;
 
@@ -177,7 +178,7 @@ setInterval(() => {
     io.to(id).emit('projectiles', nearbyProjectiles);
     io.to(id).emit('enemies', nearbyEnemies);
   }
-}, 1000 / 30); // 30Hz
+}, 1000 / 60); // 30Hz
 
 io.on('connection', socket => {
   socket.on('newPlayer', username => {

@@ -36,6 +36,7 @@ resize();
 
 let me = null;
 let players = {};
+let playerObjects = {}; // Track player instances for rendering
 let projectiles = [];
 let map = [];
 let grassMap = [];
@@ -60,38 +61,38 @@ socket.on('map', m => {
   tileMap = new TileMap(map, grassMap, grassTiles, treeImg, TILE_SIZE);
 });
 
+const ZOOM = 1.25; // 125%
+
 // Draw loop
 socket.on('state', all => {
   players = all;
   if (!me) me = { name: players[socket.id]?.name || '', id: socket.id };
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.save();
-
-  // --- HANDLE ROTATION FOR MOBILE PORTRAIT ---
+  ctx.scale(ZOOM, ZOOM);  // --- HANDLE ROTATION FOR MOBILE PORTRAIT ---
   let rotated = false;
   if (isMobile() && isPortrait()) {
     rotated = true;
-    ctx.translate(canvas.width, 0);
+    // Try a different rotation approach: rotate around the center instead
+    const centerX = window.innerWidth / ZOOM / 2;
+    const centerY = window.innerHeight / ZOOM / 2;
+    ctx.translate(centerX, centerY);
     ctx.rotate(Math.PI / 2);
+    ctx.translate(-centerY, -centerX); // Note: swapped after rotation
   }
 
   const p = players[socket.id];
   let camX = 0, camY = 0;
-  let cssWidth = parseInt(canvas.style.width) || window.innerWidth;
-  let cssHeight = parseInt(canvas.style.height) || window.innerHeight;
-
-  if (p) {
+  let cssWidth = (parseInt(canvas.style.width) || window.innerWidth) / ZOOM;
+  let cssHeight = (parseInt(canvas.style.height) || window.innerHeight) / ZOOM;  if (p) {
     if (rotated) {
-      let fudgeX, fudgeY;
-      if (document.fullscreenElement) {
-        fudgeX = 3.65;
-        fudgeY = 2.475;
-      } else {
-        fudgeX = 4;
-        fudgeY = 2.15;
-      }
-      camX = p.x - canvas.width / fudgeX;
-      camY = p.y - canvas.height / fudgeY;
+      // With center-based rotation, we can use standard camera logic
+      const rotatedCssWidth = window.innerHeight / ZOOM;
+      const rotatedCssHeight = window.innerWidth / ZOOM;
+      
+      camX = p.x - rotatedCssWidth / 2;
+      camY = p.y - rotatedCssHeight / 2;
+      
       ctx.translate(-camX, -camY);
     } else {
       camX = p.x - cssWidth / 2;
@@ -99,8 +100,9 @@ socket.on('state', all => {
       ctx.translate(-camX, -camY);
     }
   }
-
-  // --- DEBUG DATA ---
+  // Calculate view dimensions accounting for rotation
+  let viewW = rotated ? (window.innerHeight / ZOOM) : cssWidth;
+  let viewH = rotated ? (window.innerWidth / ZOOM) : cssHeight;
   uiManager.updateDebugOverlay({
     camX,
     camY,
@@ -112,35 +114,68 @@ socket.on('state', all => {
     cssHeight,
     rotated,
     canvasStyleWidth: canvas.style.width,
-    canvasStyleHeight: canvas.style.height
+    canvasStyleHeight: canvas.style.height,
+    viewW,
+    viewH,
+    // View bounds - what we're actually seeing
+    viewLeft: camX,
+    viewRight: camX + viewW,
+    viewTop: camY,
+    viewBottom: camY + viewH,
+    // Player offset from center
+    playerOffsetX: p ? (p.x - (camX + viewW/2)) : 'n/a',
+    playerOffsetY: p ? (p.y - (camY + viewH/2)) : 'n/a',    // Additional debug for rotation
+    canvasTranslateX: rotated ? (window.innerHeight / ZOOM) : 0,
+    canvasTranslateY: rotated ? 0 : 0,
+    windowInnerW: window.innerWidth,
+    windowInnerH: window.innerHeight,
+    rotatedViewW: rotated ? (window.innerHeight / ZOOM) : 'n/a',
+    rotatedViewH: rotated ? (window.innerWidth / ZOOM) : 'n/a',
+    // New diagnostic data
+    devicePixelRatio: window.devicePixelRatio || 1,
+    actualCanvasWidthCSS: parseInt(canvas.style.width) || 0,
+    actualCanvasHeightCSS: parseInt(canvas.style.height) || 0,
+    zoomFactor: ZOOM
   });
 
   // --- MAP DRAW ---
   if (tileMap) {
-    tileMap.draw(ctx);
+    tileMap.draw(ctx, camX, camY, viewW, viewH);
   }
 
-  // Player rendering
-  let playerObjects = {};
+  // Player rendering with culling
   for (let id in players) {
-    if (!playerObjects[id]) {
-      playerObjects[id] = new Player(players[id], playerImg);
-    } else {
-      playerObjects[id].update(players[id]);
+    const pl = players[id];
+    if (isOnScreen(pl.x, pl.y, camX, camY, viewW, viewH)) {
+      if (!playerObjects[id]) {
+        playerObjects[id] = new Player(pl, playerImg);
+      } else {
+        playerObjects[id].update(pl);
+      }
+      playerObjects[id].draw(ctx);
     }
-    playerObjects[id].draw(ctx);
+  }  // Clean up player objects for disconnected players
+  for (let id in playerObjects) {
+    if (!players[id]) {
+      delete playerObjects[id];
+    }
   }
 
-  // Projectile rendering
+  // Projectile rendering with culling
   for (let proj of projectiles) {
-    proj.update();
-    proj.draw(ctx);
+    if (isOnScreen(proj.x, proj.y, camX, camY, viewW, viewH)) {
+      proj.update();
+      proj.draw(ctx);
+    }
   }
   projectiles = projectiles.filter(p => p.t < 20);
 
-  // Enemy rendering
+  // Enemy rendering with culling
   for (let id in enemyObjects) {
-    enemyObjects[id].draw(ctx);
+    const enemy = enemyObjects[id];
+    if (isOnScreen(enemy.x, enemy.y, camX, camY, viewW, viewH)) {
+      enemy.draw(ctx);
+    }
   }
 
   ctx.restore();
@@ -174,8 +209,35 @@ canvas.addEventListener('pointerdown', e => {
   if (!me) return;
   const p = players[socket.id];
   if (!p) return;
-  const dx = e.clientX - p.x;
-  const dy = e.clientY - p.y;
+  
+  // Get canvas bounds and account for device pixel ratio
+  const rect = canvas.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  let canvasX = (e.clientX - rect.left) / ZOOM;
+  let canvasY = (e.clientY - rect.top) / ZOOM;
+    // Account for rotation if in portrait mode
+  if (isMobile() && isPortrait()) {
+    const temp = canvasX;
+    canvasX = canvasY;
+    canvasY = (window.innerHeight / ZOOM) - temp;
+  }// Convert to world coordinates
+  let camX, camY;
+  
+  if (isMobile() && isPortrait()) {
+    camX = p.x - (window.innerHeight / ZOOM) / 2;
+    camY = p.y - (window.innerWidth / ZOOM) / 2;
+  } else {
+    const cssWidth = (parseInt(canvas.style.width) || window.innerWidth) / ZOOM;
+    const cssHeight = (parseInt(canvas.style.height) || window.innerHeight) / ZOOM;
+    camX = p.x - cssWidth / 2;
+    camY = p.y - cssHeight / 2;
+  }
+  
+  const worldX = canvasX + camX;
+  const worldY = canvasY + camY;
+  
+  const dx = worldX - p.x;
+  const dy = worldY - p.y;
   const len = Math.sqrt(dx*dx + dy*dy) || 1;
   socket.emit('move', { dx: dx/len, dy: dy/len });
 });

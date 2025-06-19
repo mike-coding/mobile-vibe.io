@@ -6,11 +6,16 @@ export class TileMap {
     this.treeImg = treeImg;
     this.tileSize = tileSize;
   }
+  draw(ctx, camX, camY, viewW, viewH) {
+    // Calculate tile bounds for culling
+    const startX = Math.max(0, Math.floor(camX / this.tileSize));
+    const endX = Math.min(this.map[0].length, Math.ceil((camX + viewW) / this.tileSize));
+    const startY = Math.max(0, Math.floor(camY / this.tileSize));
+    const endY = Math.min(this.map.length, Math.ceil((camY + viewH) / this.tileSize));
 
-  draw(ctx) {
-    // Draw grass
-    for (let y = 0; y < this.map.length; y++) {
-      for (let x = 0; x < this.map[y].length; x++) {
+    // Draw grass with culling
+    for (let y = startY; y < endY; y++) {
+      for (let x = startX; x < endX; x++) {
         const grassIdx = this.grassMap[y][x];
         ctx.drawImage(
           this.grassTiles[grassIdx],
@@ -21,9 +26,10 @@ export class TileMap {
         );
       }
     }
-    // Draw trees
-    for (let y = 0; y < this.map.length; y++) {
-      for (let x = 0; x < this.map[y].length; x++) {
+    
+    // Draw trees with culling
+    for (let y = startY; y < endY; y++) {
+      for (let x = startX; x < endX; x++) {
         if (this.map[y][x] === 1) {
           ctx.drawImage(
             this.treeImg,

@@ -34,9 +34,7 @@ export class UIManager {
     window.addEventListener('resize', () => this.updateUIRotation());
     window.addEventListener('orientationchange', () => this.updateUIRotation());
     document.addEventListener('DOMContentLoaded', () => this.updateUIRotation());
-  }
-
-  updateDebugOverlay(debugData) {
+  }  updateDebugOverlay(debugData) {
     this.debugData = debugData;
     if (!this.debugContent) return;
     this.debugContent.innerHTML = `
@@ -50,15 +48,34 @@ export class UIManager {
       cssWidth: ${debugData.cssWidth}<br>
       cssHeight: ${debugData.cssHeight}<br>
       rotated: ${debugData.rotated}<br>
-      window.innerWidth: ${window.innerWidth}<br>
-      window.innerHeight: ${window.innerHeight}<br>
-      devicePixelRatio: ${window.devicePixelRatio}<br>
+      viewW: ${debugData.viewW}<br>
+      viewH: ${debugData.viewH}<br>
+      <br><b>View Bounds:</b><br>
+      viewLeft: ${debugData.viewLeft}<br>
+      viewRight: ${debugData.viewRight}<br>
+      viewTop: ${debugData.viewTop}<br>
+      viewBottom: ${debugData.viewBottom}<br>
+      <br><b>Player Centering:</b><br>
+      playerOffsetX: ${debugData.playerOffsetX}<br>
+      playerOffsetY: ${debugData.playerOffsetY}<br>      <br><b>Rotation Transform:</b><br>
+      canvasTranslateX: ${debugData.canvasTranslateX}<br>
+      canvasTranslateY: ${debugData.canvasTranslateY}<br>
+      rotatedViewW: ${debugData.rotatedViewW}<br>
+      rotatedViewH: ${debugData.rotatedViewH}<br>
+      <br><b>Coordinate Analysis:</b><br>
+      windowInnerW: ${debugData.windowInnerW}<br>
+      windowInnerH: ${debugData.windowInnerH}<br>
+      <br><b>Expected vs Actual:</b><br>
+      Expected center X: ${debugData.rotated ? debugData.rotatedViewW/2 : debugData.viewW/2}<br>
+      Expected center Y: ${debugData.rotated ? debugData.rotatedViewH/2 : debugData.viewH/2}<br>
+      Player screen X: ${debugData.playerX !== 'n/a' ? (debugData.playerX - debugData.camX) : 'n/a'}<br>
+      Player screen Y: ${debugData.playerY !== 'n/a' ? (debugData.playerY - debugData.camY) : 'n/a'}<br>      <br><b>Canvas Diagnostics:</b><br>
+      devicePixelRatio: ${debugData.devicePixelRatio}<br>
+      actualCanvasWidthCSS: ${debugData.actualCanvasWidthCSS}<br>
+      actualCanvasHeightCSS: ${debugData.actualCanvasHeightCSS}<br>
+      zoomFactor: ${debugData.zoomFactor}<br>
       <br>canvas.style.width: ${debugData.canvasStyleWidth}
       <br>canvas.style.height: ${debugData.canvasStyleHeight}
-      <br>document.body.clientWidth: ${document.body.clientWidth}
-      <br>document.body.clientHeight: ${document.body.clientHeight}
-      <br>screen.width: ${screen.width}
-      <br>screen.height: ${screen.height}
     `;
   }
 
