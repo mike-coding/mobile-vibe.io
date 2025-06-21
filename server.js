@@ -114,7 +114,8 @@ setInterval(() => {
                 x: enemy.x,
                 y: enemy.y,
                 type: 'food',
-                healAmount: 15
+                healAmount: 15,
+                spawnTime: Date.now() // Add timestamp for item despawning
               });
             }
             enemies.splice(j, 1);
@@ -124,9 +125,12 @@ setInterval(() => {
       }
     }
   }
-
   // Remove old projectiles
   projectiles = projectiles.filter(p => p.t < 20);
+
+  // Remove old items (2 minutes = 120,000 milliseconds)
+  const now = Date.now();
+  items = items.filter(item => (now - item.spawnTime) < 120000);
 
   // --- ENSURE ENEMY COUNT ---
   while (enemies.length < ENEMY_COUNT) {
